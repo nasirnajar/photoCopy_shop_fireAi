@@ -1,6 +1,6 @@
-lets choose peak hour tool for photocopy shop  ....as my idea ...just help me begin my project as i have commit github hourly ..
+1. lets choose peak hour tool for photocopy shop  ....as my idea ...just help me begin my project as i have commit github hourly ..
 
-Good choice. Your first commit locks your problem and person, so do this in order.
+AI:  Good choice. Your first commit locks your problem and person, so do this in order.
 
 Right now (about 10 minutes): create the repo
 
