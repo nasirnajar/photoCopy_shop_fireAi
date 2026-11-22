@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chenab Printers | Peak-hour summary</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #17212b;
+      background: #f5f7f8;
+    }
+
+    * { box-sizing: border-box; }
+
+    body { margin: 0; }
+
+    main {
+      width: min(940px, calc(100% - 32px));
+      margin: 40px auto;
+    }
+
+    header { margin-bottom: 24px; }
+
+    h1 { margin: 0 0 6px; font-size: clamp(1.6rem, 4vw, 2rem); }
+
+    .subtitle, .muted { color: #596773; }
+
+    .subtitle { margin: 0; }
+
+    .notice, .error {
+      margin: 16px 0;
+      padding: 12px 14px;
+      border-radius: 8px;
+      line-height: 1.5;
+    }
+
+    .notice { color: #68460b; background: #fff4d6; }
+    .error { color: #8b1e1e; background: #ffeded; }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin: 20px 0;
+    }
+
+    .card, section {
+      border: 1px solid #e1e6e9;
+      border-radius: 10px;
+      background: #fff;
+    }
+
+    .card { min-height: 112px; padding: 16px; }
+    .card-label { margin: 0 0 8px; color: #596773; font-size: .9rem; }
+    .card-value { margin: 0; font-size: 1.55rem; font-weight: 700; }
+    .card-detail { margin: 5px 0 0; color: #596773; font-size: .88rem; }
+
+    section { margin-top: 16px; padding: 20px; }
+
+    h2 { margin: 0 0 4px; font-size: 1.15rem; }
+
+    .section-note { margin: 0 0 16px; color: #596773; font-size: .9rem; }
+
+    .chart-row {
+      display: grid;
+      grid-template-columns: 102px minmax(30px, 1fr) 78px;
+      align-items: center;
+      gap: 12px;
+      margin: 10px 0;
+      font-size: .9rem;
+    }
+
+    .bar-track { height: 14px; overflow: hidden; border-radius: 7px; background: #edf1f3; }
+    .bar { height: 100%; min-width: 2px; border-radius: inherit; background: #36826d; }
+    .bar.peak { background: #bd6b25; }
+    .bar-value { text-align: right; color: #596773; }
+
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; text-align: left; }
+    th, td { padding: 11px 8px; border-bottom: 1px solid #e8ecee; }
+    th { color: #596773; font-size: .85rem; font-weight: 600; }
+    td { font-size: .92rem; }
+    tbody tr:last-child td { border-bottom: 0; }
+
+    @media (max-width: 620px) {
+      main { margin: 24px auto; }
+      .cards { grid-template-columns: 1fr; gap: 10px; }
+      .card { min-height: auto; }
+      section { padding: 16px; }
+      .chart-row { grid-template-columns: 84px minmax(24px, 1fr) 70px; gap: 8px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Chenab Printers</h1>
+      <p class="subtitle">Customer flow and peak-hour summary</p>
+    </header>
+
+    <div id="status" class="muted" role="status">Reading customer-flow data...</div>
+    <div id="notice" class="notice" hidden></div>
+    <div id="error" class="error" role="alert" hidden></div>
+
+    <div id="dashboard" hidden>
+      <div class="cards">
+        <article class="card">
+          <p class="card-label">Busiest hour</p>
+          <p id="peak-hour" class="card-value">-</p>
+          <p id="peak-hour-detail" class="card-detail"></p>
+        </article>
+        <article class="card">
+          <p class="card-label">Average estimated wait</p>
+          <p id="average-wait" class="card-value">-</p>
+          <p class="card-detail">Across recorded observations</p>
+        </article>
+        <article class="card">
+          <p class="card-label">Data analyzed</p>
+          <p id="observation-count" class="card-value">-</p>
+          <p id="dataset-detail" class="card-detail"></p>
+        </article>
+      </div>
+
+      <section>
+        <h2>Customers by time slot</h2>
+        <p class="section-note">Average customers in each recorded time slot. Longer bars mean busier periods; orange marks the busiest slot.</p>
+        <div id="chart" role="img" aria-label="Bar chart showing average customers by time slot"></div>
+      </section>
+
+      <section>
+        <h2>Time-slot details</h2>
+        <p class="section-note">Averages are calculated from the observations in the CSV.</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Time slot</th>
+                <th scope="col">Avg. customers</th>
+                <th scope="col">Avg. wait</th>
+                <th scope="col">Observations</th>
+              </tr>
+            </thead>
+            <tbody id="slot-rows"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    const formatNumber = value => {
+      if (value === null) return "No data";
+      const rounded = Math.round((Number(value) + Number.EPSILON) * 10) / 10;
+      return rounded.toFixed(1);
+    };
+
+    function addCell(row, value) {
+      const cell = document.createElement("td");
+      cell.textContent = value;
+      row.append(cell);
+    }
+
+    function renderChart(slots, peakSlots) {
+      const chart = document.getElementById("chart");
+      const peakLabels = new Set(peakSlots.map(slot => `${slot.start}-${slot.end}`));
+      const maximum = Math.max(...slots.map(slot => slot.customers), 0);
+
+      for (const slot of slots) {
+        const row = document.createElement("div");
+        row.className = "chart-row";
+
+        const label = document.createElement("span");
+        label.textContent = `${slot.start}-${slot.end}`;
+
+        const track = document.createElement("div");
+        track.className = "bar-track";
+        const bar = document.createElement("div");
+        const isPeak = peakLabels.has(`${slot.start}-${slot.end}`);
+        bar.className = isPeak ? "bar peak" : "bar";
+        bar.style.width = maximum ? `${slot.customers / maximum * 100}%` : "0%";
+        track.append(bar);
+
+        const count = document.createElement("span");
+        count.className = "bar-value";
+        count.textContent = `${formatNumber(slot.customers)} customers`;
+
+        row.append(label, track, count);
+        chart.append(row);
+      }
+    }
+
+    async function loadSummary() {
+      const status = document.getElementById("status");
+      const error = document.getElementById("error");
+
+      try {
+        const response = await fetch("/api/summary");
+        const summary = await response.json();
+        if (!response.ok) throw new Error(summary.error || "Could not load the CSV data.");
+
+        const busiestHour = summary.busiest_hours[0];
+        document.getElementById("peak-hour").textContent =
+          busiestHour ? busiestHour.label : "No data";
+        document.getElementById("peak-hour-detail").textContent =
+          busiestHour
+            ? `${formatNumber(busiestHour.customers_per_day)} customers per day on average`
+            : "";
+        document.getElementById("average-wait").textContent =
+          summary.average_wait === null ? "No data" : `${formatNumber(summary.average_wait)} min`;
+        document.getElementById("observation-count").textContent = summary.observation_count;
+        document.getElementById("dataset-detail").textContent =
+          `${summary.dataset} · ${summary.day_count} day(s)`;
+
+        const peakSlot = summary.busiest_slots[0];
+        if (peakSlot) {
+          const note = document.getElementById("notice");
+          note.textContent =
+            `Busiest time slot: ${peakSlot.start}-${peakSlot.end} ` +
+            `(${formatNumber(peakSlot.customers)} customers on average).`;
+          if (summary.estimated) {
+            note.textContent += " The CSV marks its values as estimates, not measured traffic.";
+          }
+          note.hidden = false;
+        }
+
+        renderChart(summary.slots, summary.busiest_slots);
+
+        const rows = document.getElementById("slot-rows");
+        for (const slot of summary.slots) {
+          const row = document.createElement("tr");
+          addCell(row, `${slot.start}-${slot.end}`);
+          addCell(row, formatNumber(slot.customers));
+          addCell(row, slot.wait === null ? "No data" : `${formatNumber(slot.wait)} min`);
+          addCell(row, String(slot.count));
+          rows.append(row);
+        }
+
+        status.hidden = true;
+        document.getElementById("dashboard").hidden = false;
+      } catch (loadError) {
+        status.hidden = true;
+        error.textContent = loadError.message;
+        error.hidden = false;
+      }
+    }
+
+    loadSummary();
+  </script>
+</body>
+</html>
