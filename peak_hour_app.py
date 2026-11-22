@@ -1,6 +1,7 @@
 import argparse
 import csv
 import json
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -20,6 +21,76 @@ class AnalyzerHandler(BaseHTTPRequestHandler):
             self.send_summary()
         else:
             self.send_error(404, "Not found")
+
+    def do_POST(self):
+        path = urlsplit(self.path).path
+        if path != "/api/observations":
+            self.send_error(404, "Not found")
+            return
+
+        try:
+            content_length = int(self.headers.get("Content-Length", "0"))
+            payload = json.loads(self.rfile.read(content_length))
+            record = self.validate_record(payload)
+            self.append_record(record)
+            summary = build_summary(self.csv_file)
+            self.send_json(201, summary)
+        except (json.JSONDecodeError, UnicodeDecodeError, ValueError, OSError, csv.Error) as error:
+            message = str(error) if str(error) else "Invalid request"
+            self.send_json(400, {"error": message})
+
+    def validate_record(self, payload):
+        required = ("date", "time_slot_start", "time_slot_end", "customer_count", "estimated_wait_minutes")
+        missing = [field for field in required if payload.get(field) in (None, "")]
+        if missing:
+            raise ValueError(f"Missing required fields: {', '.join(missing)}")
+
+        try:
+            date = datetime.strptime(str(payload["date"]), "%Y-%m-%d").date().isoformat()
+            start = datetime.strptime(str(payload["time_slot_start"]), "%H:%M").strftime("%H:%M")
+            end = datetime.strptime(str(payload["time_slot_end"]), "%H:%M").strftime("%H:%M")
+            customers = int(payload["customer_count"])
+            wait = int(payload["estimated_wait_minutes"])
+        except (TypeError, ValueError) as error:
+            raise ValueError("Date, time, customer count, or wait time is invalid") from error
+
+        if customers < 0 or wait < 0:
+            raise ValueError("Customer count and wait time must be zero or greater")
+        if end <= start:
+            raise ValueError("Time slot end must be after time slot start")
+
+        return {
+            "date": date,
+            "day_of_week": datetime.strptime(date, "%Y-%m-%d").strftime("%A"),
+            "time_slot_start": start,
+            "time_slot_end": end,
+            "customer_count": customers,
+            "estimated_wait_minutes": wait,
+        }
+
+    def append_record(self, record):
+        with self.csv_file.open(newline="", encoding="utf-8-sig") as csv_file:
+            reader = csv.DictReader(csv_file)
+            fieldnames = reader.fieldnames
+            if not fieldnames:
+                raise ValueError("the CSV file is empty")
+
+        with self.csv_file.open("a", newline="", encoding="utf-8") as csv_file:
+            writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+            next_observation_id = 1
+            with self.csv_file.open(newline="", encoding="utf-8-sig") as source:
+                for row in csv.DictReader(source):
+                    try:
+                        next_observation_id = max(next_observation_id, int(row.get("observation_id") or 0) + 1)
+                    except ValueError:
+                        pass
+
+            complete_record = {field: "" for field in fieldnames}
+            complete_record.update(record)
+            complete_record["observation_id"] = next_observation_id
+            complete_record["data_status"] = "measured"
+            complete_record["observer_notes"] = "Entered through dashboard"
+            writer.writerow(complete_record)
 
     def send_file(self, path, content_type):
         try:
