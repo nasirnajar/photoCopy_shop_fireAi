@@ -73,3 +73,8 @@ summary is therefore only a calculation from the file and cannot confirm the
 shop's actual traffic. One day's observations also cannot establish a typical
 pattern across different days. Collect and enter genuine observations over
 multiple days to make the averages more representative.
+
+
+
+## Video Link : 
+https://drive.google.com/file/d/1avrt6ED8O83Vp25dSiitVe-deyUmVnx3/view?usp=sharing
