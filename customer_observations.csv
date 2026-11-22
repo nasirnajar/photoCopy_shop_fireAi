@@ -19,3 +19,7 @@ observation_id,date,day_of_week,time_slot_start,time_slot_end,customer_count,que
 18,2026-11-22,Sunday,17:30,18:00,6,2,1,7,1,photocopying and stationery, normal campus day,clear,/,Estimated values; shop visit start  at 11:00 AM
 19,2026-11-22,Sunday,18:00,18:30,4,1,1,5,1,printing and photocopying, low evening traffic,clear,/,Estimated values; shop visit start  at 11:00 AM
 20,2026-11-22,Sunday,18:30,19:00,3,1,0,4,1,photocopying and stationery, low evening traffic,clear,/,Estimated values; shop visit start  at 11:00 AM
+21,2026-11-22,Sunday,17:02,17:20,7,,,19,,,,,measured,Entered through dashboard
+22,2026-11-22,Sunday,11:30,23:33,3,,,10,,,,,measured,Entered through dashboard
+23,2026-11-22,Sunday,11:30,23:33,12,,,3,,,,,measured,Entered through dashboard
+24,2026-11-22,Sunday,11:30,23:33,12,,,4,,,,,measured,Entered through dashboard
